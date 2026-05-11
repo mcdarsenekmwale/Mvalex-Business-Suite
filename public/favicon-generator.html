@@ -1,0 +1,198 @@
+<!-- public/favicon-generator.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Favicon Generator - Mvalex Business Suite</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 600px;
+        }
+        .icon-preview {
+            font-size: 120px;
+            margin: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            display: inline-block;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .code {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Mvalex Business Suite</h1>
+        <h2>Favicon Generator</h2>
+        
+        <div class="icon-preview" id="preview">M</div>
+        
+        <div>
+            <button onclick="generateFavicons()">Generate All Favicons</button>
+            <button onclick="downloadFavicon('favicon.ico')">Download ICO</button>
+            <button onclick="downloadFavicon('favicon-16x16.png')">Download 16x16</button>
+            <button onclick="downloadFavicon('favicon-32x32.png')">Download 32x32</button>
+            <button onclick="downloadFavicon('apple-touch-icon.png')">Download Apple</button>
+        </div>
+        
+        <div class="code" id="code-output"></div>
+    </div>
+
+    <script>
+        // Create canvas for generating icons
+        function generateIcon(size, text = "M") {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            // Rounded rectangle background
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Add subtle pattern
+            ctx.globalAlpha = 0.1;
+            for(let i = 0; i < size; i += 10) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, size);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(size, i);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+            
+            // Draw text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.6}px "Inter", "Segoe UI", system-ui`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, size/2, size/2);
+            
+            return canvas;
+        }
+        
+        function downloadFavicon(filename) {
+            let canvas;
+            if (filename === 'favicon.ico') {
+                canvas = generateIcon(64, "M");
+            } else if (filename === 'favicon-16x16.png') {
+                canvas = generateIcon(16, "M");
+            } else if (filename === 'favicon-32x32.png') {
+                canvas = generateIcon(32, "M");
+            } else if (filename === 'apple-touch-icon.png') {
+                canvas = generateIcon(180, "M");
+            }
+            
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        function generateFavicons() {
+            const sizes = [
+                { size: 16, name: 'favicon-16x16.png' },
+                { size: 32, name: 'favicon-32x32.png' },
+                { size: 48, name: 'favicon-48x48.png' },
+                { size: 64, name: 'favicon-64x64.png' },
+                { size: 128, name: 'favicon-128x128.png' },
+                { size: 180, name: 'apple-touch-icon.png' },
+                { size: 192, name: 'android-chrome-192x192.png' },
+                { size: 512, name: 'android-chrome-512x512.png' }
+            ];
+            
+            sizes.forEach(({size, name}) => {
+                const canvas = generateIcon(size, "M");
+                const link = document.createElement('a');
+                link.download = name;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+            
+            document.getElementById('code-output').innerHTML = `
+                <h3>📋 Add this to your layout.tsx:</h3>
+                <pre>
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Mvalex Business Suite",
+  description: "Professional business tools powered by AI",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/safari-pinned-tab.svg",
+        color: "#667eea",
+      },
+    ],
+  },
+  manifest: "/site.webmanifest",
+};
+                </pre>
+            `;
+        }
+        
+        // Preview animation
+        const preview = document.getElementById('preview');
+        let rotation = 0;
+        setInterval(() => {
+            rotation = (rotation + 10) % 360;
+            preview.style.transform = `rotate(${rotation}deg)`;
+        }, 2000);
+    </script>
+</body>
+</html>

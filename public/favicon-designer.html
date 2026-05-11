@@ -1,0 +1,311 @@
+<!-- public/favicon-designer.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mvalex Favicon Designer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .designer {
+            background: white;
+            border-radius: 24px;
+            padding: 32px;
+            max-width: 900px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .subtitle { color: #64748b; margin-bottom: 24px; }
+        .preview-area {
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 32px;
+            padding: 24px;
+            background: #f8fafc;
+            border-radius: 16px;
+        }
+        .preview-item {
+            text-align: center;
+        }
+        .preview-item canvas {
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            margin-bottom: 8px;
+        }
+        .preview-label {
+            font-size: 12px;
+            color: #64748b;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+        }
+        input, select {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin-top: 24px;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 24px;
+        }
+        @media (max-width: 640px) {
+            .designer { padding: 20px; }
+            .preview-area { gap: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="designer">
+        <h1>🎨 Mvalex Favicon Designer</h1>
+        <p class="subtitle">Create custom favicons for your business suite</p>
+        
+        <div class="preview-area" id="previewArea"></div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Text / Symbol</label>
+                <input type="text" id="text" value="M" maxlength="2" placeholder="Enter text">
+            </div>
+            <div class="control-group">
+                <label>Primary Color</label>
+                <input type="color" id="color1" value="#667eea">
+            </div>
+            <div class="control-group">
+                <label>Secondary Color</label>
+                <input type="color" id="color2" value="#764ba2">
+            </div>
+            <div class="control-group">
+                <label>Shape</label>
+                <select id="shape">
+                    <option value="rounded">Rounded Square</option>
+                    <option value="circle">Circle</option>
+                    <option value="square">Square</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button onclick="updatePreview()">Update Preview</button>
+            <button onclick="downloadAll()">Download All Sizes</button>
+            <button onclick="downloadHTMLCode()">Get HTML Code</button>
+        </div>
+        
+        <div class="code-block" id="codeBlock" style="display: none;"></div>
+    </div>
+
+    <script>
+        const sizes = [16, 32, 48, 64, 128, 180, 192, 512];
+        
+        function drawIcon(ctx, size, text, color1, color2, shape) {
+            const center = size / 2;
+            const radius = size * 0.4;
+            
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, color1);
+            gradient.addColorStop(1, color2);
+            
+            // Draw background
+            ctx.beginPath();
+            if (shape === 'circle') {
+                ctx.arc(center, center, center - 2, 0, Math.PI * 2);
+            } else if (shape === 'rounded') {
+                const radius = size * 0.2;
+                ctx.moveTo(radius, 0);
+                ctx.lineTo(size - radius, 0);
+                ctx.quadraticCurveTo(size, 0, size, radius);
+                ctx.lineTo(size, size - radius);
+                ctx.quadraticCurveTo(size, size, size - radius, size);
+                ctx.lineTo(radius, size);
+                ctx.quadraticCurveTo(0, size, 0, size - radius);
+                ctx.lineTo(0, radius);
+                ctx.quadraticCurveTo(0, 0, radius, 0);
+            } else {
+                ctx.rect(2, 2, size - 4, size - 4);
+            }
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // Add subtle pattern
+            ctx.globalAlpha = 0.1;
+            for(let i = 0; i < size; i += 8) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, size);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(size, i);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+            
+            // Draw text
+            if (text) {
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${size * 0.5}px "Inter", "Segoe UI", system-ui`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text.toUpperCase(), center, center);
+            }
+        }
+        
+        function updatePreview() {
+            const text = document.getElementById('text').value;
+            const color1 = document.getElementById('color1').value;
+            const color2 = document.getElementById('color2').value;
+            const shape = document.getElementById('shape').value;
+            
+            const previewArea = document.getElementById('previewArea');
+            previewArea.innerHTML = '';
+            
+            // Show preview at different sizes
+            [32, 64, 128, 180].forEach(size => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                canvas.style.width = `${size}px`;
+                canvas.style.height = `${size}px`;
+                const ctx = canvas.getContext('2d');
+                drawIcon(ctx, size, text, color1, color2, shape);
+                
+                const div = document.createElement('div');
+                div.className = 'preview-item';
+                div.appendChild(canvas);
+                div.innerHTML += `<div class="preview-label">${size}x${size}</div>`;
+                previewArea.appendChild(div);
+            });
+        }
+        
+        function downloadAll() {
+            const text = document.getElementById('text').value;
+            const color1 = document.getElementById('color1').value;
+            const color2 = document.getElementById('color2').value;
+            const shape = document.getElementById('shape').value;
+            
+            sizes.forEach(size => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                drawIcon(ctx, size, text, color1, color2, shape);
+                
+                const link = document.createElement('a');
+                const name = size === 16 ? 'favicon-16x16.png' :
+                            size === 32 ? 'favicon-32x32.png' :
+                            size === 180 ? 'apple-touch-icon.png' :
+                            size === 192 ? 'android-chrome-192x192.png' :
+                            size === 512 ? 'android-chrome-512x512.png' :
+                            `favicon-${size}x${size}.png`;
+                link.download = name;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+            
+            // Create ICO file (using 64px for ICO)
+            const icoCanvas = document.createElement('canvas');
+            icoCanvas.width = 64;
+            icoCanvas.height = 64;
+            const icoCtx = icoCanvas.getContext('2d');
+            drawIcon(icoCtx, 64, text, color1, color2, shape);
+            
+            const icoLink = document.createElement('a');
+            icoLink.download = 'favicon.ico';
+            icoLink.href = icoCanvas.toDataURL();
+            icoLink.click();
+            
+            alert('All favicons downloaded!');
+        }
+        
+        function downloadHTMLCode() {
+            const text = document.getElementById('text').value;
+            const color1 = document.getElementById('color1').value;
+            const color2 = document.getElementById('color2').value;
+            const shape = document.getElementById('shape').value;
+            
+            const codeBlock = document.getElementById('codeBlock');
+            codeBlock.style.display = 'block';
+            codeBlock.innerHTML = `
+                <strong>📋 Add this to your app/layout.tsx:</strong><br><br>
+                <pre>import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Mvalex Business Suite",
+  description: "Professional business tools powered by AI",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  manifest: "/site.webmanifest",
+};</pre>
+                
+                <br><strong>🎨 Your Custom Settings:</strong><br>
+                • Text/Symbol: ${text}<br>
+                • Primary Color: ${color1}<br>
+                • Secondary Color: ${color2}<br>
+                • Shape: ${shape}<br>
+            `;
+        }
+        
+        // Initialize
+        updatePreview();
+    </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+  <rect width="220" height="220" fill="#0B0F1A"/>
+
+  <!-- Grid settings -->
+  <!-- cell size = 40, gap = 10 -->
+
+  <!-- Row 1 -->
+  <rect x="10" y="10" width="40" height="40" fill="#3A86FF"/>
+  <rect x="60" y="10" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="110" y="10" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="160" y="10" width="40" height="40" fill="#3A86FF"/>
+
+  <!-- Row 2 -->
+  <rect x="10" y="60" width="40" height="40" fill="#3A86FF"/>
+  <rect x="60" y="60" width="40" height="40" fill="#3A86FF"/>
+  <rect x="110" y="60" width="40" height="40" fill="#3A86FF"/>
+  <rect x="160" y="60" width="40" height="40" fill="#3A86FF"/>
+
+  <!-- Row 3 -->
+  <rect x="10" y="110" width="40" height="40" fill="#3A86FF"/>
+  <rect x="60" y="110" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="110" y="110" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="160" y="110" width="40" height="40" fill="#3A86FF"/>
+
+  <!-- Row 4 -->
+  <rect x="10" y="160" width="40" height="40" fill="#3A86FF"/>
+  <rect x="60" y="160" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="110" y="160" width="40" height="40" fill="#2A2F3A"/>
+  <rect x="160" y="160" width="40" height="40" fill="#3A86FF"/>
+</svg>

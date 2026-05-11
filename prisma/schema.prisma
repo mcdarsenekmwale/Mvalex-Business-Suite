@@ -1,0 +1,1709 @@
+// Mvalex Business Suite - Prisma Database Schema
+// Production-ready schema with full RBAC, asset management, credit system, and analytics
+
+generator client {
+  provider        = "prisma-client"
+  previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE USER & AUTHENTICATION
+// ============================================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum RoleType {
+  USER
+  ADMIN
+  SUPER_ADMIN
+  SUPPORT_AGENT
+  SUPPORT_MANAGER
+  USER_ADMIN
+  AUDIT_MANAGER
+  GLOBAL_READER
+  VIEWER
+  AGENT
+}
+
+// ============================================
+// NOTIFICATION SYSTEM
+// ============================================
+
+// Expanded Notification types used across the platform
+enum NotificationType {
+  TICKET_CREATED
+  TICKET_ASSIGNED
+  TICKET_RESPONDED
+  TICKET_RESOLVED
+  TICKET_ESCALATED
+  TICKET_UNASSIGNED
+  CREDIT_LOW
+  CREDIT_ADDED
+  CREDIT_EXPIRING
+  SYSTEM_ALERT
+  AGENT_STATUS_CHANGE
+  EXPORT_COMPLETED
+  LOGO_GENERATED
+  INVOICE_PAID
+  TEMPLATE_APPROVED
+  SUBSCRIPTION_RENEWAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
+  SLACK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RETRYING
+}
+
+model NotificationPreference {
+  id        String              @id @default(cuid())
+  userId    String
+  type      NotificationType
+  channel   NotificationChannel
+  enabled   Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, channel])
+  @@index([userId])
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String
+  title       String
+  message     String              @db.Text
+  type        NotificationType
+  channel     NotificationChannel
+  status      NotificationStatus  @default(PENDING)
+  metadata    Json?
+  isRead      Boolean             @default(false)
+  readAt      DateTime?
+  deliveredAt DateTime?
+  actionUrl   String?
+  entityType  String?
+  entityId    String?
+  createdAt   DateTime            @default(now())
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationQueues NotificationQueue[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([type, status])
+  @@index([userId, isRead])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([type])
+  @@map("notifications")
+}
+
+// Queue to manage retries and delivery state across channels
+model NotificationQueue {
+  id             String              @id @default(cuid())
+  notificationId String
+  channel        NotificationChannel
+  retryCount     Int                 @default(0)
+  maxRetries     Int                 @default(3)
+  nextRetryAt    DateTime
+  errorMessage   String?
+  status         QueueStatus         @default(PENDING)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([nextRetryAt])
+}
+
+// Templates for consistent notification messaging
+model NotificationTemplate {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      NotificationType
+  title     String
+  message   String   @db.Text
+  channels  NotificationChannel[] @default([IN_APP, EMAIL])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@map("notification_templates")
+}
+
+// prisma/schema.prisma (make sure these models exist)
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  passwordHash  String?   @map("password_hash")
+  name          String?
+  avatarUrl     String?   @map("avatar_url")
+
+  // Credit system
+  creditsBalance Int @default(0) @map("credits_balance")
+
+  // Status
+  status UserStatus @default(PENDING_VERIFICATION)
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  lastLoginAt DateTime? @map("last_login_at")
+  lastLoginIP String?   @map("last_login_ip")
+
+  // Relations
+  roles                       UserRole[]
+  businessCards               BusinessCard[]
+  invoices                    Invoice[]
+  logos                       Logo[]
+  exports                     Export[]
+  creditTransactions          CreditTransaction[]
+  supportTickets              SupportTicket[]
+  notifications               Notification[]
+  // Notification & agent relations
+  notificationPreferences     NotificationPreference[]
+  availability                AgentAvailability?
+  ticketAssignmentsAsAgent    TicketAssignment[]       @relation("TicketAssignment_agent")
+  ticketAssignmentsAsAssigner TicketAssignment[]       @relation("TicketAssignment_assigner")
+  agentPerformances           AgentPerformance[]
+
+  // Preferences
+  language String @default("en")
+  theme    String @default("system")
+  timezone String @default("UTC")
+
+  // Relations
+  accounts Account[]
+  sessions Session[]
+
+  companyProfiles CompanyProfile[]
+
+  generatedAssets   GeneratedAsset[]
+  aiConversations   AIConversation[]
+  analyticsEvents   AnalyticsEvent[]
+  exportSetting     ExportSetting?
+  exportBatches     ExportBatch[]
+  activities        UserActivity[]
+  couponRedemptions CouponRedemption[]
+  creditAuditLogs   CreditAuditLog[]
+  auditLogs         AuditLog[]
+  securityEvents    SecurityEvent[]
+  backupsCreated    Backup[]             @relation("BackupCreatedBy")
+  backupsRestored   BackupRestore[]      @relation("BackupRestoredBy")
+  backupSchedules   BackupSchedule[]     @relation("BackupScheduleCreatedBy")
+  mfaSettings       UserMFA?
+  mfaVerifications  MFAVerification[]
+  mfaTrustedDevices MFATrustedDevice[]
+  mfaRecoveries     MFARecovery[]
+
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// prisma/schema.prisma (add this model to your existing schema)
+
+model Export {
+  id        String       @id @default(cuid())
+  userId    String
+  assetId   String
+  assetType AssetType
+  format    ExportFormat
+  fileUrl   String
+  fileSize  Int? // Size in bytes
+  fileName  String? // Original file name
+  mimeType  String? // MIME type of the exported file
+  status    ExportStatus @default(PROCESSING)
+  metadata  Json? // Additional metadata like dimensions, pages, etc.
+  error     String? // Error message if failed
+  expiresAt DateTime? // When the file expires (for temporary files)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, assetType, format]) // Prevent duplicate exports
+  @@index([userId])
+  @@index([assetId])
+  @@index([assetType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ExportStatus {
+  PENDING // Queued for processing
+  PROCESSING // Currently being generated
+  COMPLETED // Successfully generated
+  FAILED // Generation failed
+  EXPIRED // File has expired
+  DELETED // File has been deleted
+}
+
+// Optional: Add export settings model for user preferences
+model ExportSetting {
+  id              String        @id @default(cuid())
+  userId          String        @unique @map("user_id")
+  defaultFormat   ExportFormat? // Default export format for each asset type
+  quality         Int? // Quality setting (1-100 for images)
+  includeMetadata Boolean       @default(true)
+  autoExpireDays  Int?          @default(7) // Auto-delete exports after N days
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Optional: Export batch model for bulk exports
+model ExportBatch {
+  id             String       @id @default(cuid())
+  userId         String       @map("user_id")
+  batchId        String // Unique batch identifier for grouped exports
+  assetIds       String[] // Array of asset IDs
+  assetType      AssetType
+  format         ExportFormat
+  totalItems     Int // Total number of items in batch
+  completedItems Int          @default(0)
+  failedItems    Int          @default(0)
+  status         ExportStatus @default(PENDING)
+  zipFileUrl     String? // URL of the zip file containing all exports
+  createdAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([batchId])
+  @@index([status])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// ROLE-BASED ACCESS CONTROL (RBAC)
+// ============================================
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        RoleType @default(USER)
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by")
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  name        String? @unique
+  resource    String
+  action      String
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  grantedAt    DateTime @default(now()) @map("granted_at")
+  grantedBy    String?  @map("granted_by")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================
+// COMPANY PROFILE
+// ============================================
+
+model CompanyProfile {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  // Company Info
+  name    String
+  nameCn  String? @map("name_cn")
+  logoUrl String? @map("logo_url")
+
+  // Contact
+  email   String?
+  phone   String?
+  website String?
+
+  // Address
+  address    String?
+  city       String?
+  country    String?
+  postalCode String? @map("postal_code")
+
+  // Tax & Business
+  taxId       String? @map("tax_id")
+  businessReg String? @map("business_registration")
+
+  // Bank Details
+  bankName    String? @map("bank_name")
+  bankAccount String? @map("bank_account")
+  swiftCode   String? @map("swift_code")
+
+  isDefault Boolean @default(false) @map("is_default")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@index([userId])
+  @@map("company_profiles")
+}
+
+// ============================================
+// BUSINESS CARD SYSTEM
+// ============================================
+
+enum BusinessCardStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CardTemplateCategory {
+  MODERN
+  MINIMAL
+  CORPORATE
+  TECH
+  CREATIVE
+  LUXURY
+}
+
+model BusinessCardTemplate {
+  id          String               @id @default(cuid())
+  name        String
+  category    CardTemplateCategory @default(MODERN)
+  description String?
+
+  // Template Config (JSON)
+  frontConfig Json? @map("front_config")
+  backConfig  Json? @map("back_config")
+
+  // Preview
+  previewUrl   String? @map("preview_url")
+  thumbnailUrl String? @map("thumbnail_url")
+
+  // Metadata
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  businessCards BusinessCard[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("business_card_templates")
+}
+
+model BusinessCard {
+  id         String  @id @default(cuid())
+  userId     String  @map("user_id")
+  templateId String? @map("template_id")
+
+  // Card Content
+  name          String
+  title         String?
+  email         String
+  phone         String?
+  phone2        String?
+  address       String?
+  website       String?
+  companyName   String? @map("company_name")
+  companyNameCn String? @map("company_name_cn")
+
+  // QR Code
+  qrCodeType String  @default("vcard") @map("qr_code_type")
+  qrCodeData String? @map("qr_code_data")
+  qrCodeUrl  String? @map("qr_code_url")
+
+  // Styling (overrides template)
+  colorPrimary   String? @map("color_primary")
+  colorSecondary String? @map("color_secondary")
+  fontFamily     String? @map("font_family")
+
+  // Custom JSON Config
+  frontConfig Json? @map("front_config")
+  backConfig  Json? @map("back_config")
+
+  status BusinessCardStatus @default(DRAFT)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template BusinessCardTemplate? @relation(fields: [templateId], references: [id])
+  assets   GeneratedAsset[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("business_cards")
+}
+
+// ============================================
+// INVOICE SYSTEM
+// ============================================
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum InvoiceTemplateType {
+  SIMPLE
+  CORPORATE
+  SERVICE
+  DETAILED
+}
+
+model InvoiceTemplate {
+  id          String              @id @default(cuid())
+  name        String
+  type        InvoiceTemplateType @default(SIMPLE)
+  description String?
+
+  // Template Config
+  config     Json?
+  previewUrl String? @map("preview_url")
+
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  @@index([type])
+  @@map("invoice_templates")
+}
+
+model Invoice {
+  id         String  @id @default(cuid())
+  userId     String  @map("user_id")
+  templateId String? @map("template_id")
+  companyId  String? @map("company_id")
+
+  // Invoice Details
+  invoiceNumber String  @unique @map("invoice_number")
+  poNumber      String? @map("po_number")
+
+  // Dates
+  issueDate DateTime  @default(now()) @map("issue_date")
+  dueDate   DateTime? @map("due_date")
+
+  // Client Info
+  clientName    String  @map("client_name")
+  clientEmail   String? @map("client_email")
+  clientAddress String? @map("client_address")
+  clientPhone   String? @map("client_phone")
+
+  // Financial
+  currency      String  @default("USD")
+  taxRate       Decimal @default(0) @map("tax_rate")
+  discountType  String  @default("percentage") @map("discount_type") // percentage, fixed
+  discountValue Decimal @default(0) @map("discount_value")
+
+  // Calculated Fields
+  subtotal       Decimal @default(0)
+  taxAmount      Decimal @default(0) @map("tax_amount")
+  discountAmount Decimal @default(0) @map("discount_amount")
+  grandTotal     Decimal @default(0) @map("grand_total")
+  amountPaid     Decimal @default(0) @map("amount_paid")
+  balanceDue     Decimal @default(0) @map("balance_due")
+
+  // Status & Payment
+  status        InvoiceStatus @default(DRAFT)
+  paymentTerms  String?       @map("payment_terms")
+  paymentMethod String?       @map("payment_method")
+  paymentDate   DateTime?     @map("payment_date")
+
+  // Notes
+  notes         String? @db.Text
+  terms         String? @db.Text
+  footerMessage String? @map("footer_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template InvoiceTemplate? @relation(fields: [templateId], references: [id])
+  company  CompanyProfile?  @relation(fields: [companyId], references: [id])
+  items    InvoiceItem[]
+  assets   GeneratedAsset[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id        String @id @default(cuid())
+  invoiceId String @map("invoice_id")
+
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal @map("unit_price")
+  amount      Decimal
+
+  // Optional
+  itemCode String?  @map("item_code")
+  taxRate  Decimal? @map("tax_rate")
+
+  sortOrder Int @default(0) @map("sort_order")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+// ============================================
+// LOGO GENERATOR (AI-POWERED)
+// ============================================
+
+enum LogoStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum LogoStyle {
+  MODERN
+  TECH
+  LUXURY
+  MINIMAL
+  CORPORATE
+  CREATIVE
+}
+
+model Logo {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  // Input
+  businessName   String    @map("business_name")
+  slogan         String?
+  industry       String?
+  style          LogoStyle @default(MODERN)
+  colorPalette   String[]  @map("color_palette")
+  additionalInfo String?   @map("additional_info") @db.Text
+
+  // Generation
+  status       LogoStatus @default(PENDING)
+  generationId String?    @map("generation_id")
+  prompt       String?    @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variations LogoVariation[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("logos")
+}
+
+enum LogoVariationType {
+  FULL_COLOR
+  MONOCHROME
+  ICON_ONLY
+  DARK_BG
+  LIGHT_BG
+}
+
+model LogoVariation {
+  id     String @id @default(cuid())
+  logoId String @map("logo_id")
+
+  type     LogoVariationType @default(FULL_COLOR)
+  imageUrl String            @map("image_url")
+
+  // Format availability
+  hasPng Boolean @default(true) @map("has_png")
+  hasSvg Boolean @default(false) @map("has_svg")
+  hasPdf Boolean @default(false) @map("has_pdf")
+
+  // Metadata
+  width    Int  @default(1024)
+  height   Int  @default(1024)
+  fileSize Int? @map("file_size")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  logo Logo @relation(fields: [logoId], references: [id], onDelete: Cascade)
+
+  @@index([logoId])
+  @@map("logo_variations")
+}
+
+// ============================================
+// GENERATED ASSETS (Files)
+// ============================================
+
+enum AssetType {
+  BUSINESS_CARD_FRONT
+  BUSINESS_CARD_BACK
+  INVOICE
+  LOGO
+  QR_CODE
+  COMPANY_LOGO
+
+  BUSINESS_CARD
+  REPORT
+  TEMPLATE
+}
+
+enum ExportFormat {
+  PNG
+  JPG
+  PDF
+  DOCX
+  XLSX
+  SVG
+
+  JPEG
+
+  CSV
+
+  ZIP
+  JSON
+}
+
+model GeneratedAsset {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  // Polymorphic reference
+  entityType String @map("entity_type") // businessCard, invoice, logo
+  entityId   String @map("entity_id")
+
+  // Asset details
+  assetType AssetType    @map("asset_type")
+  format    ExportFormat
+
+  // File info
+  fileName String @map("file_name")
+  fileUrl  String @map("file_url")
+  fileSize Int    @map("file_size")
+  mimeType String @map("mime_type")
+
+  // Metadata
+  width  Int?
+  height Int?
+  dpi    Int  @default(300)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessCard BusinessCard? @relation(fields: [entityId], references: [id], map: "asset_business_card_fk")
+  invoice      Invoice?      @relation(fields: [entityId], references: [id], map: "asset_invoice_fk")
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([assetType])
+  @@map("generated_assets")
+}
+
+// ============================================
+// CREDIT SYSTEM
+// ============================================
+
+enum TransactionType {
+  CREDIT_ADD
+  CREDIT_DEDUCT
+  CREDIT_REFUND
+  CREDIT_BONUS
+  CREDIT_PURCHASE
+}
+
+enum CreditAction {
+  GENERATE_LOGO
+  GENERATE_BUSINESS_CARD
+  GENERATE_INVOICE
+  EXPORT_FILE
+  AI_ASSISTANT
+  TEMPLATE_PREMIUM
+  CREDIT_PURCHASE
+  CREDIT_REFUND
+  CREDIT_BONUS
+  CREDIT_DEDUCT
+  CREATE_BUSINESS_CARD
+  CREATE_INVOICE
+  EDIT_BUSINESS_CARD
+  EDIT_INVOICE
+  GENERATE_LOGO_VARIATIONS
+  GENERATE_BUSINESS_CARD_VARIATIONS
+  EXPORT_BUSINESS_CARD_PNG
+  EXPORT_BUSINESS_CARD_PDF
+  EXPORT_INVOICE_PDF
+  EXPORT_INVOICE_EXCEL
+  EXPORT_LOGO_PNG
+  EXPORT_LOGO_SVG
+  AI_CHAT_MESSAGE
+  AI_DESIGN_SUGGESTION
+}
+
+model CreditTransaction {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  amount Int
+  type   TransactionType
+  action CreditAction?
+
+  // Reference
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+
+  // Description
+  description String?
+  metadata    Json?
+
+  // Balance snapshot
+  balanceAfter Int @map("balance_after")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("credit_transactions")
+}
+
+model PricingRule {
+  id          String       @id @default(cuid())
+  action      CreditAction @unique
+  cost        Int
+  description String?
+  isActive    Boolean      @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("pricing_rules")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+  FREE_CREDITS
+}
+
+// Coupons and redemptions for promotions and discounts
+model Coupon {
+  id                String       @id @default(cuid())
+  code              String       @unique
+  description       String?
+  discountType      DiscountType
+  discountValue     Float
+  creditsAmount     Int?
+  minPurchase       Int?
+  maxDiscount       Float?
+  usageLimit        Int?
+  usedCount         Int          @default(0)
+  perUserLimit      Int          @default(1)
+  validFrom         DateTime
+  validUntil        DateTime
+  isActive          Boolean      @default(true)
+  applicableActions String[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  redemptions CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id            String   @id @default(cuid())
+  couponId      String
+  userId        String
+  usedAt        DateTime @default(now())
+  transactionId String?
+
+  coupon Coupon @relation(fields: [couponId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// Audit trail for every credit change
+model CreditAuditLog {
+  id            String   @id @default(cuid())
+  userId        String
+  action        String
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  ipAddress     String?
+  userAgent     String?
+  timestamp     DateTime @default(now())
+  metadata      Json?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([timestamp])
+  @@map("credit_audit_logs")
+}
+
+// Reward rules and achievements
+model RewardRule {
+  id            String   @id @default(cuid())
+  action        String   @unique
+  credits       Int
+  dailyLimit    Int?
+  totalLimit    Int?
+  cooldownHours Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("reward_rules")
+}
+
+model Achievement {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String?
+  creditsReward Int
+  icon          String?
+  requirement   Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("achievements")
+}
+
+// Idempotency keys for request deduplication
+model IdempotencyKey {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  userId       String?
+  requestHash  String?
+  responseData Json?
+  consumed     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@map("idempotency_keys")
+}
+
+// ============================================
+// SUPPORT TICKET SYSTEM
+// ============================================
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  subject     String
+  description String         @db.Text
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+
+  // Categorization
+  category String? // billing, technical, feature, general
+
+  // Assignment
+  assignedTo String? @map("assigned_to")
+
+  // Timestamps
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    TicketMessage[]
+  assignments TicketAssignment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id       String  @id @default(cuid())
+  ticketId String  @map("ticket_id")
+  userId   String? @map("user_id")
+
+  message String  @db.Text
+  isAdmin Boolean @default(false) @map("is_admin")
+
+  // Attachments
+  attachments Json? // array of {name, url}
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Agent availability tracking for routing and dashboard
+enum AgentStatus {
+  ONLINE
+  BUSY
+  AWAY
+  OFFLINE
+  IN_MEETING
+  ON_BREAK
+  TRAINING
+}
+
+model AgentAvailability {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  status         AgentStatus @default(OFFLINE)
+  capacity       Int         @default(5)
+  currentLoad    Int         @default(0)
+  lastActiveAt   DateTime    @default(now())
+  manualOverride Boolean     @default(false)
+  overrideReason String?
+  shiftStart     DateTime?
+  shiftEnd       DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, currentLoad])
+  @@index([lastActiveAt(sort: Desc)])
+  @@index([status])
+  @@index([currentLoad])
+  @@map("agent_availabilities")
+}
+
+// Daily agent performance metrics for workload balancing and reporting
+model AgentPerformance {
+  id              String   @id @default(cuid())
+  agentId         String   @map("agent_id")
+  date            DateTime @default(now()) @db.Date
+  ticketsResolved Int      @default(0) @map("tickets_resolved")
+  avgResponseTime Int      @default(0) @map("avg_response_time") // minutes
+  satisfactionRate Float   @default(0) @map("satisfaction_rate")
+  totalWorkTime   Int      @default(0) @map("total_work_time") // minutes
+
+  agent User @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, date])
+  @@index([date])
+  @@index([agentId])
+  @@map("agent_performances")
+}
+
+// Ticket assignment history for auditing and workload tracking
+enum AssignmentType {
+  AUTO
+  MANUAL
+  ESCALATION
+  REASSIGNMENT
+}
+
+model TicketAssignment {
+  id             String         @id @default(cuid())
+  ticketId       String
+  agentId        String
+  assignedBy     String
+  assignedAt     DateTime       @default(now())
+  unassignedAt   DateTime?
+  assignmentType AssignmentType @default(MANUAL)
+
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  agent    User          @relation("TicketAssignment_agent", fields: [agentId], references: [id])
+  assigner User          @relation("TicketAssignment_assigner", fields: [assignedBy], references: [id])
+
+  @@index([agentId, assignedAt(sort: Desc)])
+  @@index([ticketId])
+  @@index([agentId])
+  @@map("ticket_assignments")
+}
+
+// ============================================
+// AI ASSISTANT
+// ============================================
+
+model AIConversation {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  title String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AIMessage[]
+
+  @@index([userId])
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id             String @id @default(cuid())
+  conversationId String @map("conversation_id")
+
+  role    String // user, assistant, system
+  content String @db.Text
+
+  // Token usage (for cost tracking)
+  promptTokens     Int? @map("prompt_tokens")
+  completionTokens Int? @map("completion_tokens")
+  totalTokens      Int? @map("total_tokens")
+
+  // Context data
+  contextData Json? @map("context_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+// ============================================
+// ANALYTICS & DASHBOARD
+// ============================================
+
+enum AnalyticsEventType {
+  USER_REGISTERED
+  USER_LOGIN
+  BUSINESS_CARD_CREATED
+  BUSINESS_CARD_EXPORTED
+  INVOICE_CREATED
+  INVOICE_EXPORTED
+  LOGO_GENERATED
+  LOGO_EXPORTED
+  CREDIT_PURCHASED
+  CREDIT_CONSUMED
+  SUPPORT_TICKET_CREATED
+  AI_CONVERSATION_STARTED
+  TEMPLATE_USED
+}
+
+model AnalyticsEvent {
+  id     String  @id @default(cuid())
+  userId String? @map("user_id")
+
+  eventType AnalyticsEventType @map("event_type")
+
+  // Event data
+  metadata Json?
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("analytics_events")
+}
+
+// Daily aggregated stats (for dashboard performance)
+model DailyStats {
+  id   String   @id @default(cuid())
+  date DateTime @unique @db.Date
+
+  // User metrics
+  newUsers    Int @default(0) @map("new_users")
+  activeUsers Int @default(0) @map("active_users")
+
+  // Asset metrics
+  businessCardsCreated Int @default(0) @map("business_cards_created")
+  invoicesCreated      Int @default(0) @map("invoices_created")
+  logosGenerated       Int @default(0) @map("logos_generated")
+
+  // Export metrics
+  exportsPng  Int @default(0) @map("exports_png")
+  exportsJpg  Int @default(0) @map("exports_jpg")
+  exportsPdf  Int @default(0) @map("exports_pdf")
+  exportsDocx Int @default(0) @map("exports_docx")
+  exportsXlsx Int @default(0) @map("exports_xlsx")
+
+  // Credit metrics
+  creditsPurchased Int @default(0) @map("credits_purchased")
+  creditsConsumed  Int @default(0) @map("credits_consumed")
+
+  // Revenue (if monetized)
+  revenue Decimal @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@map("daily_stats")
+}
+
+// ============================================
+// SYSTEM CONFIGURATION
+// ============================================
+
+model SystemSetting {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  value       Json
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("system_settings")
+}
+
+// ============================================
+// EMAIL TEMPLATES
+// ============================================
+
+model EmailTemplate {
+  id      String @id @default(cuid())
+  name    String @unique
+  subject String
+  body    String @db.Text
+
+  // Template variables (JSON schema)
+  variables Json?
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  type     String // welcome, notification, invoice, reminder, alert, security, marketing, system
+  category String // welcome, notification, invoice, reminder, alert, security, marketing, system
+
+  isDefault  Boolean @default(false)
+  usageCount Int     @default(0)
+
+  @@index([type])
+  @@index([category])
+  @@index([isActive])
+  @@map("email_templates")
+}
+
+//=============================================
+// USER ACTIVITIES
+//=============================================
+
+// prisma/schema.prisma (add this model)
+
+model UserActivity {
+  id            String   @id @default(cuid())
+  userId        String
+  action        String // CREATE_BUSINESS_CARD, EXPORT_FILE, etc.
+  actionType    String // CREATE, EDIT, DELETE, EXPORT, VIEW
+  entityType    String // BUSINESS_CARD, INVOICE, LOGO, EXPORT, USER, TICKET
+  entityId      String?
+  creditsUsed   Int?     @default(0)
+  creditsBefore Int?
+  creditsAfter  Int?
+  description   String?
+  metadata      Json? // Additional data
+  createdAt     DateTime @default(now())
+  ipAddress     String?
+  userAgent     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([entityType])
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+model AuditLog {
+  id         String        @id @default(cuid())
+  userId     String?
+  action     String // USER_CREATED, ROLE_ASSIGNED, PERMISSION_CHANGED, etc.
+  entityType String // USER, ROLE, PERMISSION, TICKET, SYSTEM
+  entityId   String?
+  oldValue   Json? // Previous state
+  newValue   Json? // New state
+  changes    Json? // Detailed diff
+  ipAddress  String?
+  userAgent  String?
+  severity   AuditSeverity @default(INFO)
+  createdAt  DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@index([severity])
+  @@map("audit_logs")
+}
+
+// ============================================
+// SECURITY EVENTS
+// ============================================
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  EMAIL_CHANGED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  SUSPICIOUS_ACTIVITY
+  RATE_LIMIT_EXCEEDED
+  UNAUTHORIZED_ACCESS_ATTEMPT
+}
+
+model SecurityEvent {
+  id          String            @id @default(cuid())
+  userId      String?
+  eventType   SecurityEventType
+  description String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("security_events")
+}
+
+// ============================================
+// BACKUP SYSTEM
+// ============================================
+
+enum BackupType {
+  FULL
+  DATABASE
+  FILES
+  CONFIGURATION
+}
+
+enum BackupStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  MISSING
+}
+
+enum StorageType {
+  LOCAL
+  S3
+  FTP
+  CUSTOM
+}
+
+enum RestoreStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum LogLevel {
+  INFO
+  WARNING
+  ERROR
+  DEBUG
+}
+
+model Backup {
+  id               String       @id @default(cuid())
+  name             String
+  type             BackupType   @default(FULL)
+  size             Int          @default(0)
+  status           BackupStatus @default(PENDING)
+  filePath         String?
+  checksum         String?
+  compression      String?      @default("zip")
+  compressionLevel Int?         @default(9)
+  storageType      StorageType  @default(LOCAL)
+  storageLocation  String?
+  metadata         Json?
+  errorMessage     String?
+  createdAt        DateTime     @default(now())
+  completedAt      DateTime?
+
+  createdBy     String
+  createdByUser User           @relation("BackupCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  restores      BackupRestore[]
+  logs          BackupLog[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+  @@index([createdBy])
+  @@map("backups")
+}
+
+model BackupRestore {
+  id         String        @id @default(cuid())
+  backupId   String
+  backup     Backup        @relation(fields: [backupId], references: [id], onDelete: Cascade)
+  restoredBy String
+  restoredByUser User      @relation("BackupRestoredBy", fields: [restoredBy], references: [id], onDelete: Cascade)
+  status     RestoreStatus @default(PENDING)
+  message    String?
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+  completedAt DateTime?
+
+  @@index([backupId])
+  @@index([restoredBy])
+  @@index([createdAt])
+  @@map("backup_restores")
+}
+
+model BackupSchedule {
+  id            String            @id @default(cuid())
+  name          String
+  type          BackupType        @default(FULL)
+  frequency     ScheduleFrequency @default(DAILY)
+  time          String
+  dayOfWeek     Int?
+  dayOfMonth    Int?
+  retentionDays Int               @default(30)
+  isActive      Boolean           @default(true)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  createdBy     String
+  createdByUser User              @relation("BackupScheduleCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([nextRunAt])
+  @@map("backup_schedules")
+}
+
+model BackupLog {
+  id        String   @id @default(cuid())
+  backupId  String?
+  backup    Backup?  @relation(fields: [backupId], references: [id], onDelete: SetNull)
+  level     LogLevel @default(INFO)
+  message   String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([backupId])
+  @@index([level])
+  @@index([createdAt])
+  @@map("backup_logs")
+}
+
+// ============================================
+// MULTI-FACTOR AUTHENTICATION (MFA)
+// ============================================
+
+enum MFAMethod {
+  TOTP
+  SMS
+  EMAIL
+}
+
+enum RecoveryType {
+  CODE_REQUEST
+  PHONE_CHANGE
+  EMAIL_CHANGE
+  RESET_REQUEST
+}
+
+enum RecoveryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  USED
+}
+
+enum MFACodeType {
+  SMS
+  EMAIL
+}
+
+model MFAConfig {
+  id              String     @id @default(cuid())
+  enabled         Boolean    @default(false)
+  enforceForRoles String[]   @default([])
+  allowedMethods  MFAMethod[] @default([TOTP, EMAIL])
+  gracePeriodDays Int        @default(7)
+  rememberDevice  Boolean    @default(true)
+  rememberDays    Int        @default(30)
+  maxAttempts     Int        @default(5)
+  lockoutMinutes  Int        @default(15)
+  updatedBy       String?
+  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+
+  @@map("mfa_configs")
+}
+
+model UserMFA {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  enabled         Boolean   @default(false)
+  preferredMethod MFAMethod @default(TOTP)
+  backupCodes     String[]  @default([])
+  totpSecret      String?
+  phoneNumber     String?
+  phoneVerified   Boolean   @default(false)
+  email           String?
+  emailVerified   Boolean   @default(false)
+  recoveryEmail   String?
+  lastVerifiedAt  DateTime?
+  disabledAt      DateTime?
+  disabledBy      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([enabled])
+  @@map("user_mfas")
+}
+
+model MFAVerification {
+  id        String    @id @default(cuid())
+  userId    String
+  method    MFAMethod
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([success])
+  @@map("mfa_verifications")
+}
+
+model MFATrustedDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String   @unique
+  deviceName String
+  deviceType String?  // mobile, desktop, tablet
+  userAgent  String?
+  ipAddress  String?
+  lastUsedAt DateTime @default(now())
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([expiresAt])
+  @@map("mfa_trusted_devices")
+}
+
+model MFARecovery {
+  id          String         @id @default(cuid())
+  userId      String
+  requestType RecoveryType   @default(CODE_REQUEST)
+  status      RecoveryStatus @default(PENDING)
+  code        String
+  expiresAt   DateTime
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+  @@index([status])
+  @@map("mfa_recoveries")
+}
+
+model MFACode {
+  id        String     @id @default(cuid())
+  userId    String
+  code      String
+  type      MFACodeType
+  used      Boolean    @default(false)
+  expiresAt DateTime
+  createdAt DateTime   @default(now())
+
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@map("mfa_codes")
+}
