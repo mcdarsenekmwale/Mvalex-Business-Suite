@@ -36,8 +36,6 @@ export default function LoginPage() {
         redirect: false,
       });
 
-      console.log(result)
-
       if (result?.ok && result?.status === 200) {
         // Check if MFA is required from the session or response
         const response = await fetch("/api/auth/session");

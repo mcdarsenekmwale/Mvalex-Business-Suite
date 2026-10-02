@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth/permissions";
 import { AdminClientLayout } from "@/components/admin/layout/AdminClientLayout";
+import { FullPageLoading } from "@/components/shared/ui/full-page-loading";
 
 export const metadata: Metadata = {
   title: "Admin Panel - Mvalex Business Suite",
@@ -20,6 +21,11 @@ export default async function AdminRootLayout({
   if (!session?.user?.id || !isAdmin(session.user.role as any)) {
     redirect("/unauthorized");
   }
+
+    //Loading state
+    if ((session as any).status === "loading") {
+      return <FullPageLoading />;
+    }
 
   return (
     <AdminClientLayout session={session}>

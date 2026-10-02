@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
+import { useSessionTracker } from "@/hooks/use-session-tracker";
 
 export function Providers({ 
   children, 
@@ -28,6 +29,7 @@ export function Providers({
 
   return (
     <SessionProvider session={session}>
+      <SessionTracker />
       <ThemeProvider
         attribute="class"
         defaultTheme="system"
@@ -41,4 +43,10 @@ export function Providers({
       </ThemeProvider>
     </SessionProvider>
   );
+}
+
+// Inner component that calls useSessionTracker inside SessionProvider context
+function SessionTracker() {
+  useSessionTracker();
+  return null;
 }

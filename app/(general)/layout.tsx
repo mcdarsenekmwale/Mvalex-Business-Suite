@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { UserSidebar } from "@/components/general/layout/UserSidebar";
 import { UserHeader } from "@/components/general/layout/UserHeader";
+import { FullPageLoading } from "@/components/shared/ui/full-page-loading";
 
 export default function GeneralLayout({
   children,
@@ -13,7 +14,7 @@ export default function GeneralLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +33,11 @@ export default function GeneralLayout({
       }
     }
   }, [session, router]);
+
+  //Loading state
+  if (status === "loading") {
+    return <FullPageLoading />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900">
